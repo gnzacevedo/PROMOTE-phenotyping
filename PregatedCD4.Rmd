@@ -1,5 +1,5 @@
 ---
-title: "PROMOTE Phenotyping analysis prototype"
+title: "PROMOTE Phenotyping - CD4 analysis"
 author: "Gonzalo Acevedo"
 date: "`r Sys.Date()`"
 html_document:
@@ -22,7 +22,6 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r}
 library(tidyverse)
 library(parallel)
-library(tidyr)
 library(magrittr)
 library(dplyr)
 library(flowCore)
@@ -32,6 +31,16 @@ library(patchwork)
 library(ggcyto)
 library(ggrepel)
 library(flowWorkspace)
+library(clustree)
+library(foreach)
+library(doParallel)
+library(parallel)
+library(ggrastr)
+library(ggsignif)
+library(ggbeeswarm)
+suppressMessages(library(CATALYST))
+library(tidygraph)
+library(ggraph)
 
 data.dir <- '/Users/gacevedo/Library/CloudStorage/Box-Box/Flow Transfer - Shared/Data and analyses/PROMOTE phenotyping/all_CD4'
 ```
@@ -91,7 +100,7 @@ fs
 ### Transform
 
 -   Visualize the data to visually select cofactors for ArcSinh
-    transformation.
+transformation.
 
 ```{r, warning=FALSE, fig.width=8, eval=FALSE}
 plots <- list()
@@ -117,8 +126,8 @@ for(i in markernames(fs)){
       fsApply(FUN=function(ff) ff[sample(1:nrow(ff), 5e3), ]) %>%
       ###
       ggplot(aes(x=.data[[fluorx]], 
-                        y=FSC.A,
-                        color=name))+
+                 y=FSC.A,
+                 color=name))+
       geom_point(size=0.1, alpha=0.3)+
       scale_y_continuous(labels = function(x) format(x, scientific = TRUE))+
       theme_classic()+
@@ -221,8 +230,8 @@ for(i in 1:length(dim.combos)){
     fsApply(FUN=function(ff) ff[sample(1:nrow(ff), 5e3), ]) %>%
     ###
     ggplot(aes(x=.data[[fluorx]], 
-                      y=.data[[fluory]], 
-                      color=name))+
+               y=.data[[fluory]], 
+               color=name))+
     geom_point(size=0.1, alpha=0.2)+
     labs(x=paste(fluorx, x), y=paste(fluory,y))+
     theme_classic()+
@@ -238,8 +247,9 @@ plist %>% print
 - Save transformed `flowSet` and .fcs files.  
 
 ```{r, eval=FALSE}
-saveRDS(fs, file='transformedFlowSet.RDS')
-ff.to.fcs <- function(ff, dir.to='./transformed'){
+saveRDS(fs, file='CD4/CD4_transformedFlowSet.RDS')
+
+ff.to.fcs <- function(ff, dir.to='./CD4/CD4_transformed'){
   if(!dir.exists(dir.to)){
     dir.create(dir.to)
   }
@@ -257,7 +267,7 @@ Start from the names in the `flowSet`.
 
 ```{r}
 if(!exists('fs')){
-fs <- readRDS('transformedFlowSet.RDS')
+  fs <- readRDS('CD4_transformedFlowSet.RDS')
 }
 
 md <- pData(fs)
@@ -279,7 +289,7 @@ p3data1 <- haven::read_dta(p3file1) %>%
   select(id, date, ageatsample, dob, gender, Txarm, PQCat, malariaincidencePI) %>%
   distinct() %>%
   mutate(id=as.character(id))
- 
+
 p3data1 %>% slice_sample(n=10)
 ```
 
@@ -315,8 +325,8 @@ md %<>%
   rowwise() %>%
   mutate(Tx=ifelse(is.na(Txarm), 'ANC', as.character(Txarm)),
          Adherence=ifelse(is.na(Txarm), 'ANC',
-           ifelse(Txarm=='No chemoprevention', 'NoChemop',
-                  ifelse(adcatFINAL=='DP Score >=2', 'High', 'NotHigh')))
+                          ifelse(Txarm=='No chemoprevention', 'NoChemop',
+                                 ifelse(adcatFINAL=='DP Score >=2', 'High', 'NotHigh')))
   ) %>%
   ungroup()
 md
@@ -330,8 +340,13 @@ rm(p3data1, p3data2, expmd)
 
 - Save flowSet with metadata.  
 
+```{r, eval=FALSE}
+saveRDS(fs, file='CD4/CD4_transformedFlowSet_withMetadata.RDS')
+```
+
 ```{r}
-saveRDS(fs, file='transformedFlowSet_withMetadata.RDS')
+fs <- readRDS('CD4/CD4_transformedFlowSet_withMetadata.RDS')
+md <- pData(fs)
 ```
 
 ## Normalization   
@@ -367,9 +382,9 @@ channels
 ```{r}
 library(CytoNorm)
 
-transf.fcs.files <- list.files('transformed/', pattern='\\.fcs$', ignore.case=TRUE)
+transf.fcs.files <- list.files('CD4/CD4_transformed/', pattern='\\.fcs$', ignore.case=TRUE)
 ndata <- data.frame(File=transf.fcs.files,
-                    Path=paste0('transformed/',transf.fcs.files)) %>%
+                    Path=paste0('CD4/CD4_transformed/',transf.fcs.files)) %>%
   mutate(Type=ifelse(grepl('ANC51', File), 'Train', 'Validation')) %>%
   left_join(md %>% select(name, Batch), 
             by=c('File'='name'))
@@ -398,7 +413,7 @@ cvs <- testCV(fsom,
 cvs.df <- data.frame('k'=integer(0), 'cv'=numeric(0))
 for(i in names(cvs$cvs)){
   cvs.df <- rbind(cvs.df, data.frame('k'=rep(as.integer(i), length(cvs$cvs[[i]])),
-                                  'cv'=cvs$cvs[[i]]))
+                                     'cv'=cvs$cvs[[i]]))
 }
 cvs.df %>%
   ggplot(aes(x=as.factor(k), y=cv))+
@@ -410,7 +425,7 @@ cvs.df %>%
 
 -Train the model:  
 
-```{r}
+```{r, eval=FALSE}
 model <- CytoNorm.train(files = train_data$Path,
                         labels = train_data$Batch,
                         channels = channels,
@@ -433,7 +448,7 @@ model <- CytoNorm.train(files = train_data$Path,
 
 - Normalize the rest of the samples.  
 
-```{r}
+```{r, eval=FALSE}
 CytoNorm.normalize(model = model,
                    files = ndata$Path,
                    labels = ndata$Batch,
@@ -441,8 +456,8 @@ CytoNorm.normalize(model = model,
                    transformList.reverse = NULL,
                    normMethod.normalize = QuantileNorm.normalize,
                    write=TRUE,
-                   outputDir = "Normalized",
-                   prefix = "Norm_",
+                   outputDir = "CD4/CD4_Normalized",
+                   prefix = "CD4_Norm_",
                    clean = TRUE,
                    verbose = TRUE)
 ```
@@ -452,13 +467,12 @@ CytoNorm.normalize(model = model,
 -First with the normalizer samples.  
 
 ```{r}
-library(patchwork)
-fs.n<- read.flowSet(path='Normalized', pattern='fcs', transformation=NULL)
+fs.n<- read.flowSet(path='CD4/CD4_Normalized', pattern='fcs', transformation=NULL)
 
 md.n <- pData(fs.n)
 
 md.n %<>%
-  mutate('Batch'=gsub('(Norm_)(.+)(_CD4_.+$)', '\\2', name),
+  mutate('Batch'=gsub('(.+Norm_)(.+)(_CD4_.+$)', '\\2', name),
          'Donor'=gsub('(.+ )(\\S+)(\\.fcs)', '\\2', name)) %>%
   left_join(md %>% select(-name), by=c('Donor','Batch'))
 
@@ -466,59 +480,131 @@ pData(fs.n)  <- cbind(pData(fs.n), md.n %>% select(-name))
 
 fs.normalizers.n <- fs.n[pData(fs)[['Donor']]=='ANC51']
 
-plist <- list()
-for(c in channels){
-  before <- ggplot(fs.normalizers, aes(x=.data[[c]], color=Batch, group=name))+
-    scale_color_manual(values=c('firebrick','cyan4'))+
+before.data <- fsApply(fs.normalizers, FUN=function(x) as.data.frame(exprs(x)))
+after.data <- fsApply(fs.normalizers.n, FUN=function(x) as.data.frame(exprs(x)))
+
+for(i in 1:length(after.data)){
+  before.data[[i]][['Batch']] <- pData(fs.normalizers)[['Batch']][i]
+  before.data[[i]][['name']] <- pData(fs.normalizers)[['name']][i]
+  after.data[[i]][['Batch']] <- pData(fs.normalizers.n)[['Batch']][i]
+  after.data[[i]][['name']] <- pData(fs.normalizers.n)[['name']][i]
+}
+
+before.data %<>% bind_rows()
+after.data %<>% bind_rows()
+
+cl <- makeCluster(8)
+registerDoParallel(cl)
+
+#for(c in channels){
+
+plist <- foreach(c=channels, .packages=c('flowCore','ggcyto','ggplot2', 'patchwork')) %dopar% {
+  
+  before <- ggplot(before.data, 
+                   aes(x=.data[[c]], color=Batch, group=name))+
     theme_classic()+
     ggtitle('Before')+
     geom_density()
   
-  after <- ggplot(fs.normalizers.n, aes(x=.data[[c]], color=Batch, group=name))+
-    scale_color_manual(values=c('firebrick','cyan4'))+
-    theme_classic()+
-    ggtitle('After')+
-    geom_density()
+  
+  #after
+  
+  after <- ggplot(after.data,
+                  aes(x=.data[[c]], color=Batch, group=name))+
+    geom_density()+
+    theme_classic()
+  
+  
   #cat('plotted', c, '\n')
-  plist[[c]] <- before/after
+  #plist[[c]] <- before/after
+  
+  res <- before/after
+  return(res)
 }
+
+stopCluster(cl)
 walk(plist, print)
 ```
 
 - Create plots for all samples (writing instead of displaying to save RAM).  
 
-```{r}
-plist <- list()
+```{r, eval=FALSE}
+# for(c in channels){
+#   before <- ggplot(fs, aes(x=.data[[c]], color=Batch, group=name))+
+#     scale_color_manual(values=c('firebrick','cyan4'))+
+#     theme_classic()+
+#     ggtitle('Before')+
+#     geom_density()
+#   
+#   after <- ggplot(fs.n, aes(x=.data[[c]], color=Batch, group=name))+
+#     scale_color_manual(values=c('firebrick','cyan4'))+
+#     theme_classic()+
+#     ggtitle('After')+
+#     geom_density()
+#   
+#   plot <- before/after
+#   png(filename=paste0('CD4_Normalized/DensityPlot_',c,'.png'), width=1000, height=650)
+#   print(plot)
+#   dev.off()
+#   rm(plot)
+#   gc()
+#   
+#   cat('Saved plot for', c,'\n')
+# }
 
-for(c in channels){
-  before <- ggplot(fs, aes(x=.data[[c]], color=Batch, group=name))+
-    scale_color_manual(values=c('firebrick','cyan4'))+
+
+cl <- makeCluster(10)
+registerDoParallel(cl)
+
+#for(c in channels){
+
+plist <- foreach(c=channels, .packages=c('flowCore','ggcyto','ggplot2', 'patchwork', 'magrittr', 'tidyverse')) %dopar% {
+  
+  before.data <- fsApply(fs, FUN=function(x) as.data.frame(exprs(x[,c])))
+  after.data <- fsApply(fs.n, FUN=function(x) as.data.frame(exprs(x[,c])))
+  
+  for(i in 1:length(after.data)){
+    before.data[[i]][['Batch']] <- pData(fs)[['Batch']][i]
+    before.data[[i]][['name']] <- pData(fs)[['name']][i]
+    after.data[[i]][['Batch']] <- pData(fs.n)[['Batch']][i]
+    after.data[[i]][['name']] <- pData(fs.n)[['name']][i]
+  }
+  
+  before.data %<>% bind_rows()
+  after.data %<>% bind_rows()
+  
+  before <- ggplot(before.data, 
+                   aes(x=.data[[c]], color=Batch, group=name))+
     theme_classic()+
     ggtitle('Before')+
     geom_density()
   
-  after <- ggplot(fs.n, aes(x=.data[[c]], color=Batch, group=name))+
-    scale_color_manual(values=c('firebrick','cyan4'))+
-    theme_classic()+
-    ggtitle('After')+
-    geom_density()
+  
+  #after
+  
+  after <- ggplot(after.data,
+                  aes(x=.data[[c]], color=Batch, group=name))+
+    geom_density()+
+    theme_classic()
+  
   
   plot <- before/after
-  png(filename=paste0('Normalized/DensityPlot_',c,'.png'), width=1000, height=650)
+  png(filename=paste0('CD4_Normalized/DensityPlot_',c,'.png'), width=1000, height=650)
   print(plot)
   dev.off()
-  rm(plot)
+  rm(plot, before, after, before.data, after.data)
   gc()
   
   cat('Saved plot for', c,'\n')
 }
 
+stopCluster(cl)
 ```
 
 - Save normalized `flowSet` with metadata.  
 
 ```{r}
-saveRDS(fs.n, file='normFlowSet_withMetadata.RDS')
+saveRDS(fs.n, file='CD4/CD4_normFlowSet_withMetadata.RDS')
 ```
 
 
@@ -527,18 +613,14 @@ saveRDS(fs.n, file='normFlowSet_withMetadata.RDS')
 ### Build `SingleCellExperiment`.  
 
 -   Need to set up objects that will be built into `SingleCellExperiment`:
-    -- `flowSet` (ready from prior steps) 
-    -- `md`, a `data.frame` containing the metadata (`pData(fs)`) 
-    -- `panel`, a `data.frame` matching fluorochromes, markers and class of marker (type, state or none)
-
-```{r}
-suppressMessages(library(CATALYST))
-```
+-- `flowSet` (ready from prior steps) 
+-- `md`, a `data.frame` containing the metadata (`pData(fs)`) 
+-- `panel`, a `data.frame` matching fluorochromes, markers and class of marker (type, state or none)
 
 - Panel information   
 
 ```{r}
-fs.n <- readRDS('normFlowSet_withMetadata.RDS')
+fs.n <- readRDS('CD4/CD4_normFlowSet_withMetadata.RDS')
 panel <- data.frame('fcs_colname'=names(markernames(fs.n)),
                     'antigen'=markernames(fs.n))
 
@@ -566,7 +648,7 @@ sce <- prepData(fs.n,
                 md_cols = list(file="name", 
                                id='name',
                                factors=colnames(md.n)[-1]
-                               ), 
+                ), 
                 panel_cols=list(channel= "fcs_colname", 
                                 antigen="antigen",
                                 class="marker_class"),
@@ -583,7 +665,7 @@ gc()
 ```
 
 -   I need to change the 'assay' name in the SCE, because of default
-    values harcoded in many of the functions in the `CATALYST` package.
+values harcoded in many of the functions in the `CATALYST` package.
 
 ```{r}
 names(sce@assays) <- 'exprs'
@@ -645,29 +727,7 @@ sce <- cluster(sce,
                features=fts, xdim=20, ydim=20,
                maxK=40, verbose=TRUE, seed=1)
 
-saveRDS(sce, 'sce_flowsom.RDS')
-```
-
--   Check cluster stability to select number of metaclusters
-
-```{r}
-sce <- readRDS('sce_flowsom.RDS')
-delta_area(sce)
-```
-
-
-```{r}
-delta_area(sce)+lims(y=c(0, 0.2))+
-  scale_x_continuous(breaks=waiver(), limits=c(4, 25))+
-  theme(aspect.ratio=0.5)
-```
-
-```{r}
-#install.packages('clustree')
-library(clustree)
-clustree(sce@metadata$cluster_codes[,11:25], prefix='meta', 
-         node_size_range=c(2,10), node_alpha=0.5,
-         edge_width=0.5)
+saveRDS(sce, 'CD4/CD4_sce_flowsom.RDS')
 ```
 
 ### UMAP
@@ -675,107 +735,198 @@ clustree(sce@metadata$cluster_codes[,11:25], prefix='meta',
 ```{r, eval=FALSE}
 set.seed(1312)
 sce <- runDR(sce, dr='UMAP', features=fts, verbose=TRUE)
-saveRDS(sce, file='sce_flowsom_umap.RDS', compress=FALSE)
+saveRDS(sce, file='CD4/CD4_sce_flowsom_umap.RDS', compress=FALSE)
 ```
 
 ```{r}
-sce <- readRDS('sce_flowsom_umap.RDS')
+sce <- readRDS('CD4/CD4_sce_flowsom_umap.RDS')
 ```
 
 
-```{r}
-source('DRdf.R')
+```{r, eval=FALSE}
+source('code/fx_DRdf.R')
 umap.df <- DRdf(sce, dr='UMAP', 
-                md=c(colnames(ei(sce)), 'meta22'))
+                md=c(colnames(ei(sce)), names(cluster_codes(sce)), rownames(sce)))
 
-saveRDS(umap.df, file='UMAP_dataframe.RDS')
+saveRDS(umap.df, file='CD4/CD4_UMAP_dataframe.RDS')
 
 umap.df %>%
   slice_sample(n=10)
 ```
+
+
+#### Marker expression
+
 ```{r}
-umap.df <- readRDS('UMAP_dataframe.RDS')
+if(!exists('umap.df')){
+  umap.df <- readRDS('CD4/CD4_UMAP_dataframe.RDS')
+}
+```
+
+
+```{r, fig.height=11}
+# plotDR(sce, dr='UMAP', 
+#        color_by=c('CD45RA','CCR7','CD95','CD127','CD25','CD4'))+
+#   theme(panel.background=element_rect(color='black'))
+
+markers <- c('CD45RA','CCR7','CD95','CD127','CD25','CD4',
+             'CXCR3','CCR4','CCR6','CXCR5','CXCR6','CX3CR1',
+             'CD161','KLRG1','S1PR1','LAG3','PD1','CD69')
+
+
+
+plist <-mclapply(markers, mc.cores = 6,
+                 FUN=function(m){ # foreach(m=markers[1:3], .packages=c('tidyverse','magrittr','ggplot2','ggrastr')) %dopar%{
+                   umap.df %>%
+                     slice_sample(n=1e5) %>%
+                     ggplot(aes(x=UMAP1, y=UMAP2))+
+                     geom_point_rast(mapping=aes(color=.data[[m]]),
+                                     size=0.1)+
+                     theme_classic()+
+                     scale_color_viridis_c(option='magma')+
+                     theme(panel.background=element_rect(color='black'),
+                           aspect.ratio=1)
+                 }
+)
+
+walk(plist, print)
+```
+
+## Choose metaclustering level
+
+-   Check cluster stability to select number of metaclusters
+
+```{r}
+sce <- readRDS('CD4/CD4_sce_flowsom.RDS')
+delta_area(sce)
 ```
 
 
 ```{r}
-#myClr <- c('firebrick','cyan4','darkorchid4','orange','royalblue','hotpink','chartreuse','yellow')
-plotDR(sce, dr='UMAP', color_by='meta22') #, k_pal=colorRampPalette(myClr)(22))
+delta_area(sce)+lims(y=c(0, 0.1))+
+  scale_x_continuous(breaks=waiver(), limits=c(4, 40))+
+  theme(aspect.ratio=0.5)
 ```
+
+```{r, fig.height=8, fig.width=7}
+tree <- clustree(sce@metadata$cluster_codes, prefix='meta', 
+                 node_size_range=c(2,10), node_alpha=0.5,
+                 edge_width=0.5,  node_colour='sc3_stability')+
+  scale_color_viridis_c(option='magma', direction = -1)
+#theme(legend.position='none', axis.text=element_text(color='steelblue'))
+tree
+```
+
+Plot stability over number of metaclusters 
+
+```{r}
+source('code/fx_plotMetaStability.R')
+stab.box <- plotStabilityBoxes(sce)+
+  theme(panel.grid.major.x=element_line())
+stab.box
+```
+
+```{r, fig.width=12, fig.height=8}
+stab.ribs <- plotStabilityRibbons(sce, labels.repel=TRUE)+
+  geom_vline(xintercept=c(20, 22), linetype='dashed', alpha=0.4)+
+  scale_x_continuous(breaks=seq.int(0, 40, 2))+
+  theme(panel.grid.major.x=element_line())
+
+stab.ribs
+```
+
+
+```{r}
+if(!exists('umap.df')){
+  umap.df <- readRDS('CD4_UMAP_dataframe.RDS')
+}
+```
+
+
+```{r}
+my.colors <- c('firebrick','seagreen','orange','darkorchid4','navy','hotpink',
+               'indianred','darkseagreen','khaki','lavender','steelblue','pink',
+               'darkred','yellowgreen','yellow','violet','skyblue','coral')
+
+umap.20.22 <- umap.df %>%
+  slice_sample(n=1e5) %>%
+  select(UMAP1, UMAP2, meta20, meta22, meta23, meta25) %>%
+  pivot_longer(cols=c(meta20, meta22, meta23, meta25), 
+               names_to='Metaclustering', values_to='Cluster') %>%
+  ggplot(aes(x=UMAP1, y=UMAP2, color=Cluster))+
+  geom_point(size=0.2, alpha=0.2)+
+  geom_label_repel(data=. %>% group_by(Metaclustering, Cluster) %>%
+                     summarize(UMAP1=median(UMAP1), UMAP2=median(UMAP2)),
+                   mapping=aes(label=Cluster)
+  )+
+  scale_color_manual(values=colorRampPalette(my.colors)(25))+
+  theme_classic()+
+  theme(aspect.ratio=1, legend.position='none')+
+  facet_wrap('Metaclustering')
+
+```
+
+
+```{r, fig.height=9, fig.width=9}
+(stab.ribs/(umap.20.22|(tree+theme(legend.position='none')+plot_layout(widths=c(3,1)))))+plot_layout(heights=c(3,5))
+```
+
+
+- Meta 23 seems to be the best 
 
 ```{r}
 umap.df %>%
   dplyr::filter(Tx!='ANC') %>%
   slice_sample(n=1e6) %>% # filtered for faster plotting
-  ggplot(aes(x=X1, y=X2, color=meta22))+
+  ggplot(aes(x=UMAP1, y=UMAP2, color=meta23))+
   geom_point(size=0.1, alpha=0.05)+
-  geom_label_repel(data=.%>% group_by(Tx, meta22) %>%
-               summarize(X1=mean(X1),
-                         X2=mean(X2)),
-             alpha=0.8, max.overlaps=100, size=3,
-             mapping=aes(label=meta22), 
-             show.legend=FALSE)+
+  geom_label_repel(data=.%>% group_by(Tx, meta23) %>%
+                     summarize(UMAP1=median(UMAP1),
+                               UMAP2=median(UMAP2)),
+                   alpha=0.8, max.overlaps=100, size=3,
+                   mapping=aes(label=meta23), 
+                   show.legend=FALSE)+
   # guides(col=guide_legend(ncol = 8,
   #     override.aes = list(alpha = 1, size = 3)))+
   theme_classic()+
-  scale_color_manual(values=CATALYST:::.cluster_cols)+
+  scale_color_manual(values=colorRampPalette(my.colors)(23))+#CATALYST:::.cluster_cols)+
   theme(aspect.ratio=1, legend.position='none',
         axis.title=element_blank())+
   facet_wrap('Tx')
 ```
 
 
-
-```{r, fig.height=11}
-plotDR(sce, dr='UMAP', 
-       color_by=c('CD45RA','CCR7','CD95','CD127','CD25','CD4'))+
-  theme(panel.background=element_rect(color='black'))
-```
-
-
-```{r, fig.height=11}
-plotDR(sce, dr='UMAP', 
-       color_by=c('CXCR3','CCR4','CCR6','CXCR5','CXCR6','CX3CR1'))+
-  theme(panel.background=element_rect(color='black'))
-```
-
-
-```{r, fig.height=11}
-plotDR(sce, dr='UMAP', 
-       color_by=c('CD161','KLRG1','S1PR1','LAG3','PD1','CD69'))+
-  theme(panel.background=element_rect(color='black'))
-```
-
-
-
 ### Cluster annotation.  
 
 ```{r}
-plotExprHeatmap(sce, features = fts,
-    by = "cluster_id", k = "meta22",
-    scale = "first", q = 0.01, perc = TRUE, col_dend = FALSE)
+fts <- c("CD69","PD1","CXCR6",
+         "CD161","CCR4","CCR6","CCR7","CXCR3","CD45RA","CD95","CD25",
+         "CD127","LAG3","CX3CR1","CXCR5","S1PR1","KLRG1")
+
+expHm <- plotExprHeatmap(sce, features = fts,
+                         by = "cluster_id", k = "meta23",
+                         scale = "first", q = 0.01, perc = TRUE, col_dend = TRUE, row_anno = TRUE)
+
+expHm
 ```
 
 
 ### Cluster Abundances.  
 
-```{r}
-library(ggsignif)
-```
 
 ```{r}
-plotAbundances(sce, k='meta22', by='sample_id', group_by='Adherence')+
+plotAbundances(sce, k='meta23', by='sample_id', group_by='Adherence')+
   theme(axis.text.x=element_blank())
 ```
 
 
 ```{r,fig.height=11, fig.width=9}
-source('fx_plotAbundances.signif.R')
+source('code/fx_plotAbundances.signif.R')
 
 sce@metadata$experiment_info$Adherence %<>%
   factor(., levels=c('ANC','High','Not high','No chemop'))
-grpCols <- c('ANC'='skyblue','No chemop'='firebrick','High'='orange','Not high'='cyan4')
-plotAbundances.signif(sce, k='meta22', group_by='Adherence', k_pal=grpCols)
+grpCols <- c('ANC'='skyblue','NoChemop'='firebrick','High'='orange','NotHigh'='cyan4')
+plotAbundances.signif(sce, k='meta23', group_by='Adherence', k_pal=grpCols)
 ```
 
 - Same as above but without ANCs.  
@@ -783,37 +934,125 @@ plotAbundances.signif(sce, k='meta22', group_by='Adherence', k_pal=grpCols)
 ```{r}
 sce2 <- sce[, colData(sce)[['Adherence']] !='ANC'] #the filterSCE function was messing up the metadata
 
-filtered.ei <- ei(sce2) %>%
+filtered.ei <- ei(sce) %>%
   dplyr::filter(Adherence!='ANC') %>%
-  mutate(Txarm=factor(Txarm, levels=c('No chemoprevention','Monthly DP')),
-         Adherence=factor(Adherence, levels=c('No chemop','Not high','High')))
+  mutate(Txarm=factor(Tx, levels=c('No chemoprevention','Monthly DP')),
+         Adherence=factor(Adherence, levels=c('NoChemop','NotHigh','High')))
 
 sce2@metadata$experiment_info <- filtered.ei
+
 colData(sce2) %<>% droplevels()
-colData(sce2)[['Adherence']] %<>% factor(., levels=c('No chemop','Not high','High'))
+colData(sce2)[['Adherence']] %<>% factor(., levels=c('NoChemop','NotHigh','High'))
 colData(sce2)[['Tx']] %<>% factor(., levels=c('No chemoprevention','Monthly DP'))
 ```
-
-```{r, fig.height=6, fig.width=11}
-adh.colors <- c('No chemop'=CATALYST:::.cluster_cols[3],
-                'Not high'= CATALYST:::.cluster_cols[2],
-                'High'=CATALYST:::.cluster_cols[1])
-
-plotAbundances.signif(sce2, k='meta22', group_by='Adherence', 
-                      k_pal=adh.colors, facets_ncol=11)+
-  guides(col=guide_legend(ncol = 3))+
-  theme(axis.text.x=element_blank(), 
-        legend.position='top')
-```
-
 
 
 ```{r, fig.height=5, fig.width=11}
 tx.colors <- c('No chemoprevention'=CATALYST:::.cluster_cols[3],
                'Monthly DP'=CATALYST:::.cluster_cols[1])
-plotAbundances.signif(sce2, k='meta22', group_by='Tx', k_pal=tx.colors, facets_ncol=11)+
+abund.byTx <- plotAbundances.signif(sce2, k='meta23', group_by='Tx', k_pal=tx.colors, facets_ncol=11)+
   guides(col=guide_legend(ncol=2))+
   theme(axis.text.x=element_blank(), 
         legend.position='top')
+
+abund.byTx
+```
+
+
+
+```{r, fig.height=6, fig.width=11}
+adh.colors <- c('NoChemop'=CATALYST:::.cluster_cols[3],
+                'NotHigh'= CATALYST:::.cluster_cols[2],
+                'High'=CATALYST:::.cluster_cols[1])
+
+abund.byAdh <- plotAbundances.signif(sce2, k='meta23', group_by='Adherence', 
+                                     k_pal=adh.colors, facets_ncol=11)+
+  guides(col=guide_legend(ncol = 3))+
+  theme(axis.text.x=element_blank(), 
+        legend.position='top')
+
+abund.byAdh
+```
+
+- Same but only No chemo vs High adherence
+
+
+```{r}
+sce3 <- sce[, colData(sce)[['Adherence']]  %in% c('NoChemop', 'High')] #the filterSCE function was messing up the metadata
+
+filtered.ei3 <- ei(sce) %>%
+  dplyr::filter(Adherence %in% c('NoChemop', 'High')) %>%
+  mutate(Txarm=factor(Tx, levels=c('No chemoprevention','Monthly DP')),
+         Adherence=factor(Adherence, levels=c('NoChemop','High')))
+
+sce3@metadata$experiment_info <- filtered.ei3
+
+colData(sce3) %<>% droplevels()
+colData(sce3)[['Adherence']] %<>% factor(., levels=c('NoChemop','High'))
+colData(sce3)[['Tx']] %<>% factor(., levels=c('No chemoprevention','Monthly DP'))
+```
+
+
+```{r}
+abund.byAdh2 <- plotAbundances.signif(sce3, k='meta23', group_by='Adherence', 
+                                      k_pal=adh.colors, facets_ncol=12)+
+  guides(col=guide_legend(ncol = 2))+
+  theme(axis.text.x=element_blank(), 
+        legend.position='top')
+
+abund.byAdh2
+```
+
+```{r}
+koi <- c(17, 19, 20, 21)
+
+umap.df %>%
+  select(meta23, all_of(fts)) %>%
+  filter(meta23 %in% koi) %>%
+  group_by(meta23) %>%
+  summarize(across(everything(), median)) %>%
+  pivot_longer(cols=where(is.numeric), names_to='Marker', values_to='Median.expr') %>%
+  group_by(Marker) %>%
+  ggplot(aes(y=Marker, x=meta23, fill=Median.expr))+
+  scale_fill_gradientn(colors=c('navy','steelblue','lavender','khaki','orange','firebrick'))+
+  geom_tile()+
+  theme_classic()+coord_fixed()
+```
+
+### Bivariates. 
+
+```{r}
+dim.pairs <- list(c('CD45RA','CCR7'),
+                  c('CD45RA','CD95'),
+                  c('CXCR3','CXCR5'),
+                  c('CCR4','CCR6'),
+                  c('CX3CR1','KLRG1'),
+                  c('CXCR5','PD1'),
+                  c('PD1','LAG3'),
+                  c('CXCR6','CD69'),
+                  c('CXCR6','S1PR1'),
+                  c('CD25','CD127'),
+                  c('CD4','CD161'))
+
+source()
+plist <- lapply(dim.pairs, FUN=function(d) plotBivariates.highlightClusters(umap.df, dimpair=d, meta='meta23', koi=koi, bg.evts=1e6))
+```
+
+```{r, fig.width=9, fig.height=9}
+ggpubr::ggarrange(plotlist=plist)
+```
+
+```{r}
+dir.create('CD4/CD4_clusterBivariates')
+lapply(dim.pairs, FUN=function(d) {
+  fil <- paste0('CD4_clusterBivariates/', d[1], '_', d[2], '.png')
+  png(filename=fil, width=200, height=200, units='px')
+  print(plotBivariates.highlightClusters(umap.df, dimpair=d, koi=koi, meta='meta23', bg.evts=1e6))
+  dev.off()
+}
+)
+# png(filename='CD4_DiffAbundantK_selectBivariates.png', width = 900, height=600, units='px')
+# print(ggpubr::ggarrange(plotlist=plist))
+# dev.off()
 ```
 
