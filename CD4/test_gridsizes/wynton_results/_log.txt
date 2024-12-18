@@ -1,0 +1,89 @@
+2024-11-08 17:08:17.300935 :: Install and load libraries 
+2024-11-08 17:09:15.173338 :: Load up functions 
+2024-11-08 17:09:15.192048 :: Loading data 
+2024-11-08 17:10:13.528125 :: Setting up parallelization 
+2024-11-08 17:10:14.29538 :: :: Running clustering 
+2024-11-08 17:11:55.786386 2024-11-08 17:11:55.788461 2024-11-08 17:11:55.790967 2024-11-08 17:11:55.7911062024-11-08 17:11:55.792542:: :: Clustering with gridsize  2024-11-08 17:11:55.793911 :: :: Clustering with gridsize :: :: Clustering with gridsize    :: :: Clustering with gridsize 10 :: :: Clustering with gridsize  11 :: :: Clustering with gridsize  9x  8 x   x10 13 x 11 12 9 started 
+x 8 started 
+   started 
+13   started 
+x started 
+ 12  started 
+2024-11-08 17:28:25.307271 :: :: :: plotting for gridsize  8 x 8 
+2024-11-08 17:29:18.435838 :: :: :: :: Done with gridsize  8 x 8 
+2024-11-08 17:29:18.446528 :: :: Clustering with gridsize  14 x 14  started 
+2024-11-08 17:33:36.574479 :: :: :: plotting for gridsize  10 x 10 
+2024-11-08 17:34:00.144836 :: :: :: :: Done with gridsize  10 x 10 
+2024-11-08 17:34:00.17379 :: :: Clustering with gridsize  15 x 15  started 
+2024-11-08 17:34:31.314369 :: :: :: plotting for gridsize  9 x 9 
+2024-11-08 17:34:51.121742 :: :: :: :: Done with gridsize  9 x 9 
+2024-11-08 17:34:51.176918 :: :: Clustering with gridsize  16 x 16  started 
+2024-11-08 17:38:59.463083 :: :: :: plotting for gridsize  11 x 11 
+2024-11-08 17:39:20.679723 :: :: :: :: Done with gridsize  11 x 11 
+2024-11-08 17:39:20.690922 :: :: Clustering with gridsize  17 x 17  started 
+2024-11-08 17:45:26.214449 :: :: :: plotting for gridsize  12 x 12 
+2024-11-08 17:45:46.825864 :: :: :: :: Done with gridsize  12 x 12 
+2024-11-08 17:45:46.870323 :: :: Clustering with gridsize  18 x 18  started 
+2024-11-08 17:46:07.920061 :: :: :: plotting for gridsize  13 x 13 
+2024-11-08 17:46:31.848982 :: :: :: :: Done with gridsize  13 x 13 
+2024-11-08 17:46:31.860168 :: :: Clustering with gridsize  19 x 19  started 
+2024-11-08 18:07:32.955871 :: :: :: plotting for gridsize  14 x 14 
+2024-11-08 18:07:55.956512 :: :: :: :: Done with gridsize  14 x 14 
+2024-11-08 18:07:55.969313 :: :: Clustering with gridsize  20 x 20  started 
+2024-11-08 18:15:25.694138 :: :: :: plotting for gridsize  15 x 15 
+2024-11-08 18:15:47.856353 :: :: :: :: Done with gridsize  15 x 15 
+2024-11-08 18:23:41.118955 :: :: :: plotting for gridsize  16 x 16 
+2024-11-08 18:24:02.788669 :: :: :: :: Done with gridsize  16 x 16 
+2024-11-08 18:29:13.642919 :: :: :: plotting for gridsize  17 x 17 
+2024-11-08 18:29:34.905129 :: :: :: :: Done with gridsize  17 x 17 
+2024-11-08 18:44:17.310349 :: :: :: plotting for gridsize  18 x 18 
+2024-11-08 18:44:39.735621 :: :: :: :: Done with gridsize  18 x 18 
+2024-11-08 18:51:53.297228 :: :: :: plotting for gridsize  19 x 19 
+2024-11-08 18:52:17.413322 :: :: :: :: Done with gridsize  19 x 19 
+2024-11-08 19:17:25.644282 :: :: :: plotting for gridsize  20 x 20 
+2024-11-08 19:17:49.82929 :: :: :: :: Done with gridsize  20 x 20 
+[[1]]
+NULL
+
+[[2]]
+NULL
+
+[[3]]
+NULL
+
+[[4]]
+NULL
+
+[[5]]
+NULL
+
+[[6]]
+NULL
+
+[[7]]
+NULL
+
+[[8]]
+NULL
+
+[[9]]
+NULL
+
+[[10]]
+NULL
+
+[[11]]
+NULL
+
+[[12]]
+NULL
+
+[[13]]
+NULL
+
+2024-11-08 19:17:50.252479 :: Stopping parallel workers 
+2024-11-08 19:17:50.376272 :: Cleaning up 
+           used  (Mb) gc trigger   (Mb)  max used   (Mb)
+Ncells  8251585 440.7   12802634  683.8  10258085  547.9
+Vcells 14251877 108.8  539351749 4115.0 560732647 4278.1
+2024-11-08 19:17:53.588155 :: Finished.

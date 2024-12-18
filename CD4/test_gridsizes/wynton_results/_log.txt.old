@@ -1,0 +1,23 @@
+2024-11-08 15:57:17.778928 :: Install and load libraries 
+2024-11-08 15:58:11.841943 :: Load up functions 
+2024-11-08 15:58:11.860386 :: Loading data 
+2024-11-08 15:58:46.11018 :: Setting up parallelization 
+2024-11-08 15:58:46.7634 :: :: Running clustering 
+2024-11-08 16:00:14.8048282024-11-08 16:00:14.804896  :: :: Clustering with gridsize  :: :: Clustering with gridsize 8  x 98   started 
+x 9  started 
+2024-11-08 16:23:50.487199 :: :: :: plotting for gridsize  8 x 8 
+2024-11-08 16:24:07.37283 :: :: :: :: Done with gridsize  8 x 8 
+2024-11-08 16:24:14.86328 :: :: :: plotting for gridsize  9 x 9 
+2024-11-08 16:24:33.588223 :: :: :: :: Done with gridsize  9 x 9 
+[[1]]
+NULL
+
+[[2]]
+NULL
+
+2024-11-08 16:24:33.625213 :: Stopping parallel workers 
+2024-11-08 16:24:33.628109 :: Cleaning up 
+           used  (Mb) gc trigger   (Mb)  max used   (Mb)
+Ncells  8251550 440.7   12802634  683.8  10258085  547.9
+Vcells 14251848 108.8  539351749 4115.0 560673810 4277.7
+2024-11-08 16:24:34.367085 :: Finished.

@@ -5,7 +5,7 @@ plotStabilityRibbons <- function(sce, labels.repel=FALSE){
   x <- clustree(sce@metadata$cluster_codes, prefix='meta', return='graph')
   
   nodes <- as.data.frame(activate(x, nodes)) %>%
-    rename(name='node', 
+    dplyr::rename(name='node', 
            x='meta',
            y='sc3_stability')
   

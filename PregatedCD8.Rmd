@@ -373,7 +373,7 @@ saveRDS(fs, file='CD8/CD8_transformedFlowSet_withMetadata.RDS')
 ```
 
 ```{r Read in pre-saved data 1}
-if(!exists('fs')){
+if(!exists('fs') | !'Tx' %in% names(pData(fs))){
 fs <- readRDS('CD8/CD8_transformedFlowSet_withMetadata.RDS')
 }
 if(!exists('md')){
@@ -1133,7 +1133,7 @@ umap.df %>%
   theme_classic()+theme(axis.text.x=element_text(angle=90, hjust=1))
 ```
 
-## Outlier-robust scaling 
+### Outlier-robust scaling 
 
 - Using custom function to linearly scale markers so that they have similar ranges
 
@@ -1143,6 +1143,10 @@ expm %<>% apply(., MARGIN=2, FUN=scaleDistro, tail.size=300)
 sce.s <- sce
 
 assay(sce.s, 'exprs') <- t(expm)
+reducedDimNames(sce.s) <- 'UMAP.old'
+
+#Change name of UMAP so that object gets updated with the scaled version when appropriate
+
 
 nrs.df.s <- calculateNRS(sce.s, features=fts)
 nrs.df.s
@@ -1172,7 +1176,8 @@ nrs.df.s %>%
 ```
 
 - Marker non-redundancy is much more balanced now. The order of marker importance has also changed somewhat.
-- Re-run clustering
+
+### Clustering
 
 ```{r FlowSOM clustering of scaled data, eval=FALSE}
 sce.s <- clusterSaveSOM(sce.s, features=fts, xdim=15, ydim=15, maxK=40, verbose=TRUE, seed=1, som.rlen=50)
@@ -1187,11 +1192,9 @@ saveRDS(sce.s, file='CD8/CD8_scescaled_flowsom_umap.RDS', compress=FALSE)
 ```
 
 ```{r Read in pre-saved umapped and flowsommed scaled data}
-if(exists('sce.s')){
-  if(!'UMAP' %in% reducedDimNames(sce.s)){
+#if(!exists('sce.s') || (!'UMAP' %in% reducedDimNames(sce.s))){
     sce.s <- readRDS('CD8/CD8_scescaled_flowsom_umap.RDS')
-  }
-}
+#}
 ```
 
 
@@ -1318,6 +1321,26 @@ ehm <- plotExprHeatmap(sce.s, features=fts, by='cluster_id', k='meta28', fun='me
 ehm
 ```
 
+```{r}
+umaps.s28 <- umap.df.s %>%
+  slice_sample(n=1e6) %>%
+  select(UMAP1, UMAP2, meta28) %>%
+  pivot_longer(cols=meta28, 
+               names_to='Metaclustering', values_to='Cluster') %>%
+  ggplot(aes(x=UMAP1, y=UMAP2, color=Cluster))+
+  geom_point(size=0.2, alpha=0.2)+
+  geom_label_repel(data=. %>% 
+                     group_by(Cluster) %>%
+                     summarize(UMAP1=median(UMAP1), UMAP2=median(UMAP2)),
+                   mapping=aes(label=Cluster)
+  )+
+  scale_color_manual(values=colorRampPalette(my.colors)(28))+
+  theme_classic()+
+  theme(aspect.ratio=1, legend.position='none')
+
+umaps.s28
+```
+
 
 - This clustering correctly separates memory subsets:
 
@@ -1410,13 +1433,13 @@ abund.byAdh2.s
 ### Expression heatmap
 
 ```{r Marker expression heatmap by cluster for scaled data}
-koi.signif <- c(6,13,23,26)
-koi.trend <- c(25)
+sig.no.chemo <- c(6, 26)
+sig.dp <- c(13,23)
 
 split.hm <- umap.df.s %>%
   select(meta28, all_of(fts)) %>%
-  mutate(koi=ifelse(meta28 %in% koi.signif, 'Sig.',
-                    ifelse(meta28 %in% koi.trend, 'Trend',
+  mutate(koi=ifelse(meta28 %in% sig.no.chemo, 'No chemop.',
+                    ifelse(meta28 %in% sig.dp, 'Monthly DP',
                            'None'))) %>%
   group_by(meta28, koi) %>%
   summarize(across(everything(), median)) %>%
@@ -1425,7 +1448,8 @@ split.hm <- umap.df.s %>%
   scale_fill_gradientn(colors=c('navy','steelblue','lavender','khaki','orange','firebrick'))+
   geom_tile()+
   facet_grid(.~koi, scales='free_x', space='free_x')+
-  theme_classic()#+coord_fixed()
+  theme_classic()+
+  theme(strip.text.x=element_text(angle=90, size=10))#+coord_fixed()
 
 split.hm
 ```
@@ -1434,20 +1458,48 @@ split.hm
 
 #### Significant clusters
 
-```{r Cluster bivariates for scaled data, fig.width=12, fig.height=8}
+```{r Cluster bivariates for scaled data no chemo gp, fig.width=12, fig.height=8}
+plist.nc <- lapply(dim.pairs,
+                  FUN=function(d){ 
+                    plotBivariates.highlightClusters(umap.df.s, dimpair=d, meta='meta28', koi=sig.no.chemo, bg.evts=1e5)+
+                      scale_y_continuous(limits=c(-0.05, 1.05), 
+                                         oob=scales::oob_squish, 
+                                         expand=expansion(0, 0), 
+                                         breaks=c(0, 0.2, 0.4, 0.6, 0.8, 1))+
+                      scale_x_continuous(limits=c(-0.05, 1.05), 
+                                         oob=scales::oob_squish, 
+                                         expand=expansion(0, 0), 
+                                         breaks=c(0, 0.2, 0.4, 0.6, 0.8, 1))
+                    })
+
+ggpubr::ggarrange(plotlist=plist.nc, nrow=3, ncol=4)
+```
+
+
+```{r Cluster bivariates for scaled data DP gp, fig.width=12, fig.height=8}
 plist <- lapply(dim.pairs,
                   FUN=function(d){ 
-                    plotBivariates.highlightClusters(umap.df.s, dimpair=d, meta='meta28', koi=c(koi.signif), bg.evts=1e5)
+                    plotBivariates.highlightClusters(umap.df.s, dimpair=d, meta='meta28', koi=sig.dp, bg.evts=1e5)+
+                      scale_y_continuous(limits=c(-0.05, 1.05), 
+                                         oob=scales::oob_squish, 
+                                         expand=expansion(0, 0), 
+                                         breaks=c(0, 0.2, 0.4, 0.6, 0.8, 1))+
+                      scale_x_continuous(limits=c(-0.05, 1.05), 
+                                         oob=scales::oob_squish, 
+                                         expand=expansion(0, 0), 
+                                         breaks=c(0, 0.2, 0.4, 0.6, 0.8, 1))
                     })
 
 ggpubr::ggarrange(plotlist=plist, nrow=3, ncol=4)
 ```
 
+
+
 #### Individual clusters
 
 ```{r Bivariate plots for scaled data, individual clusters, fig.width=12, fig.height=8}
 
-plist <- lapply(koi.signif,
+plist <- lapply(c(sig.no.chemo, sig.dp),
                 FUN=function(k){
                   pl <- lapply(dim.pairs, 
                                FUN=function(d){

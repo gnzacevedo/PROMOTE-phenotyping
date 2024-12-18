@@ -1,0 +1,4 @@
+2024-11-07 22:51:06.208156 clustering with gridsize  13 x 13  started 	
+2024-11-07 22:51:06.209359 clustering with gridsize  12 x 12  started 	
+2024-11-07 22:51:06.211627 clustering with gridsize  11 x 11  started 	
+2024-11-07 22:51:06.244978 clustering with gridsize  10 x 10  started 	
