@@ -49,7 +49,8 @@ plotJitterDensity <- function(x, fts, color.option='turbo', n.points=1e5){
                shape=1, size=5)+
     #scale_color_gradientn(colors=heat.colors)+
     scale_color_viridis_c(option=color.option)+
-    theme_classic()
+    theme_classic()+
+    theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5))
   
   return(plot)
   
