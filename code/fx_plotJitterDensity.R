@@ -9,7 +9,7 @@ plotJitterDensity <- function(x, fts, color.option='turbo', n.points=1e5){
       slice_sample(n=n.points)
   }
   
-  if('Matrix' %in% class(x)){
+  if('Matrix' %in% class(x) | 'matrix' %in% class(x)){
     d <- as.data.frame(x)
   }
   
