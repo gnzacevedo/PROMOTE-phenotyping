@@ -1,6 +1,8 @@
 
 plotJitterDensity <- function(x, fts, color.option='turbo', n.points=1e5){
   require(ggdist)
+  require(tidyverse)
+  require(magrittr)
   
   if('SingleCellExperiment' %in% class(x)){
     d <- assay(sce, 'exprs') %>% t() %>%
@@ -10,7 +12,9 @@ plotJitterDensity <- function(x, fts, color.option='turbo', n.points=1e5){
   }
   
   if('Matrix' %in% class(x) | 'matrix' %in% class(x)){
-    d <- as.data.frame(x)
+    d <- as.data.frame(x) %>%
+    select(all_of(fts)) %>%
+    slice_sample(n=n.points)
   }
   
   d.l <- d %>%
